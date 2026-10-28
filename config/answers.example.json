@@ -1,0 +1,27 @@
+{
+  "global": { "minDa": 0, "maxDa": 100, "includeStretch": false, "maxPicksPerSeatPerRun": 10 },
+  "seats": [
+    {
+      "brand": "Example Co",
+      "displayName": "Jane Example",
+      "profileId": "10001",
+      "niche": "runs a five-person residential plumbing company that handles repairs, water heaters and preventive maintenance for homeowners",
+      "topics": ["residential plumbing", "water heaters", "preventive home maintenance", "hiring and scheduling a small trade crew", "pricing home services", "running a small service business"],
+      "notTopics": ["commercial construction", "real estate investing", "legal disputes with contractors"],
+      "credentialsNotHeld": ["home inspector", "structural engineer", "attorney", "doctor"],
+      "bannedClaims": ["free estimate", "guaranteed"],
+      "approvedFacts": [
+        "Founded in 2015",
+        "Five-person team",
+        "Serves homeowners in one metro area",
+        "Handles repairs, water heater installs and preventive maintenance",
+        "Does not do new construction or commercial work"
+      ],
+      "statsUrl": null,
+      "minDa": null,
+      "maxDa": null,
+      "maxPicksPerRun": null,
+      "autoSubmit": false
+    }
+  ]
+}

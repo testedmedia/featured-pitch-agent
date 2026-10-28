@@ -1,0 +1,33 @@
+{
+  "filters": {
+    "minDa": 0,
+    "maxDa": 100,
+    "includeStretch": false,
+    "maxPicksPerSeatPerRun": 10
+  },
+  "gate": {
+    "overall": 8,
+    "lie_risk": 9,
+    "fabrication_risk": 8,
+    "ai_likelihood": 7,
+    "thesis_match": 0,
+    "maxDraftAttempts": 3
+  },
+  "seats": [
+    {
+      "key": "example_founder",
+      "displayName": "Jane Example",
+      "brand": "Example Co",
+      "profileId": "10001",
+      "persona": "Jane Example founded a small residential plumbing company in the fictional town of Willow Basin. She manages scheduling, customer communication, and a five-person team serving homeowners with routine plumbing maintenance and repairs.",
+      "topics": ["residential plumbing", "preventive maintenance", "customer service", "small business operations", "team scheduling", "water conservation"],
+      "notTopics": ["structural engineering", "legal advice", "property inspections"],
+      "bans": "Not a licensed inspector, engineer, or attorney. Never claim those credentials or answer questions requiring their authority.",
+      "banPatterns": [{ "label": "no-free-claim", "regex": "\\bfree (estimate|inspection)s?\\b", "flags": "i" }],
+      "claimsFile": "config/claims/example-co.md",
+      "statsUrl": null,
+      "autoSubmit": false,
+      "enabled": true
+    }
+  ]
+}

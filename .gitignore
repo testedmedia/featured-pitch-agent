@@ -1,0 +1,8 @@
+node_modules/
+data/
+.env
+config/seats.json
+config/claims/*
+!config/claims/example-co.md
+*.log
+.DS_Store
