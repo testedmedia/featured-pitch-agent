@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const { AGENT_HOME, CONFIG_FILE, readJson, writeJsonAtomic } = require('./paths');
-const { DEFAULTS, loadConfig, printConfigSummary } = require('./config');
+const { DEFAULTS, loadConfig, printConfigSummary, normalizeByline } = require('./config');
 
 const isText = (value) => typeof value === 'string' && value.trim().length > 0;
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -45,6 +45,7 @@ function buildConfigFromAnswers(answers) {
   if (!Array.isArray(answers.seats) || answers.seats.length === 0) problems.push('seats must be a non-empty array');
   const rawSeats = Array.isArray(answers.seats) ? answers.seats : [];
   const profiles = new Set();
+  const bylines = [];
   rawSeats.forEach((seat, index) => {
     const label = `seats[${index}]`;
     if (!isObject(seat)) {
@@ -78,12 +79,13 @@ function buildConfigFromAnswers(answers) {
     }
     checkRange(seat.minDa ?? filters.minDa, seat.maxDa ?? filters.maxDa, label);
     checkPicks(seat.maxPicksPerRun ?? filters.maxPicksPerSeatPerRun, `${label}.maxPicksPerRun`);
+    bylines[index] = normalizeByline(seat.byline, seat, problems, `${label}.byline`);
   });
   if (problems.length) throw new Error(problems.join('\n'));
 
   const used = new Set();
   const claimsFiles = {};
-  const seats = rawSeats.map((answer) => {
+  const seats = rawSeats.map((answer, index) => {
     const brand = answer.brand.trim();
     const displayName = answer.displayName.trim();
     const key = uniqueKey(slug(brand), used);
@@ -106,6 +108,7 @@ function buildConfigFromAnswers(answers) {
         return { label: `banned:${word}`, regex: `\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, flags: 'i' };
       }),
       claimsFile, statsUrl: answer.statsUrl ?? null, autoSubmit: answer.autoSubmit ?? false, enabled: true,
+      byline: bylines[index],
     };
     for (const field of ['minDa', 'maxDa', 'maxPicksPerRun']) {
       if (answer[field] != null) seat[field] = answer[field];
@@ -166,6 +169,15 @@ async function interactiveAnswers() {
       seat.maxDa = await number('Maximum DA for this seat', 'Press Enter to use the global maximum.', '');
       seat.maxPicksPerRun = await number('Max pitches per run for this seat', 'Press Enter to use the global limit.', '');
       seat.autoSubmit = await yesNo('Auto-submit passed pitches without asking? (y/N)', 'NO means every pitch waits on the review page for your approval.');
+      seat.byline = null;
+      if (await yesNo('Write bylined articles on Featured News for this profile? (y/N)', 'Enable article drafting for this expert profile.')) {
+        const title = await ask('Job title as shown on Featured', 'Use the title on this expert profile.');
+        const homepage = await ask('Homepage URL', 'Enter an https URL for the brand homepage.');
+        const topic = await ask('Topic area for articles', 'Describe the topic area in one or two sentences.');
+        const sources = list(await ask('Source pages (comma-separated https URLs)', 'your own statistics or guide pages work best; every number in the article must come from these pages'));
+        const authorOption = await ask('Author dropdown text', 'Press Enter to use the name, title, and brand below.', `${seat.displayName} ${title}, ${seat.brand}`);
+        seat.byline = { title, homepage, topic, sources, authorOption };
+      }
       seats.push(seat);
     } while (await yesNo('Add another seat? (y/N)', 'Add another expert profile, or finish onboarding.'));
     return { global, seats };

@@ -27,6 +27,34 @@ It runs on [Claude Code](https://claude.com/claude-code). Open Claude Code in th
                 answer is actually stored on the question page
 ```
 
+### Bylined articles (Featured News)
+
+Bylines are the highest-value placement on Featured: a full article under your name, published on Featured
+News and syndicated to partner sites, with your homepage linked in the bio.
+
+```
+ 1. SOURCES     fetch your source pages; their numbers are the only numbers the article may use
+ 2. DRAFT       one LLM call writes a 700 to 1,300 word article from your approved facts and sources
+ 3. GATES       word counts, headline and bio length, brand named once, no calls to action,
+                links only to sources, no lead-capture pages, no dashes, no invented stories
+ 4. GRADE       a separate LLM call scores accuracy, sourcing, usefulness, guideline fit, lie risk,
+                fabrication risk and AI likelihood; misses go back to the drafter, up to 3 drafts
+ 5. REVIEW      data/bylines/<date>/review.html shows every article as it will read
+ 6. STAGE       fills Featured's article form and runs Featured's own "Check for AI", then stops
+ 7. SUBMIT      only on your yes, and only if Featured's check unlocked the Submit button
+```
+
+```bash
+npm run byline -- draft                          # every profile with bylines turned on
+npm run byline-stage -- data/bylines/<date>/<profile>.json            # fill the form, run the check, stop
+npm run byline-stage -- data/bylines/<date>/<profile>.json --submit   # after you've read it
+```
+
+Turn bylines on per profile during onboarding, or later with `npm run onboard -- --add`. Featured's
+article guidelines ask that articles be written by the named author, and submitting attests to that.
+Read them and decide for your own account.
+
+
 ### The grader
 
 The grader is a fresh model call that never saw the drafter's instructions. It gets the question and the
@@ -150,8 +178,6 @@ These rules come from more than 1,500 real pitches on one account.
 
 ## Deliberately not included
 
-- **Bylined articles.** Featured's article form asks you to attest the article is not AI-written. This
-  tool does not draft or submit them.
 - **Scheduling.** Run it yourself or add your own cron job. Nothing here installs a background service.
 
 ## Files
@@ -159,7 +185,7 @@ These rules come from more than 1,500 real pitches on one account.
 ```
 config/seats.json        your profiles (created by onboarding, git-ignored)
 config/claims/*.md       approved facts per profile (git-ignored, except the example)
-data/                    session, ledgers and run folders (git-ignored)
+data/                    session, ledgers, run folders and bylines (git-ignored)
 src/                     the pipeline (see the header comment in each file)
 tests/                   npm test
 .claude/skills/featured-pitch-agent/SKILL.md   the Claude Code skill

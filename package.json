@@ -11,6 +11,8 @@
     "login": "node src/login.js",
     "start": "node src/pipeline.js",
     "submit": "node src/submit.js",
+    "byline": "node src/byline.js",
+    "byline-stage": "node src/byline-stage.js",
     "test": "node --test tests/*.test.js"
   }
 }

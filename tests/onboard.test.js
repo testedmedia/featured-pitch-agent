@@ -162,7 +162,7 @@ test('interactive onboarding collects multiple seats and defaults approval to ma
   const seatLines = (id, auto) => [
     'Example Co', 'Jane Example', id, 'Residential plumbing for homeowners', 'plumbing, maintenance',
     'legal advice', 'attorney', 'free estimate', 'Founded in 2016.', 'A five-person team serves Willow Basin.',
-    '', '', '', '', '', auto,
+    '', '', '', '', '', auto, '',
   ];
   const stdin = ['', '', '', '', ...seatLines('10001', ''), 'y', ...seatLines('10002', 'yes'), '', ''].join('\n');
   const result = f.run([], stdin);
@@ -172,6 +172,8 @@ test('interactive onboarding collects multiple seats and defaults approval to ma
   assert.equal(config.seats[0].autoSubmit, false);
   assert.equal(config.seats[1].autoSubmit, true);
   assert.equal(config.seats[0].maxPicksPerRun, 10);
+  assert.equal(config.seats[0].byline, null);
+  assert.equal(config.seats[1].byline, null);
   assert.match(result.stdout, /lower-DA sites link back more often; 0 keeps everything/);
   assert.match(result.stdout, /number after profileId= in the URL/);
   assert.match(result.stdout, /NO means every pitch waits on the review page for your approval/);
@@ -194,4 +196,61 @@ test('incomplete input, invalid answers, and bad CLI arguments fail without crea
     assert.match(result.stderr, /Usage:/);
   }
   assert.equal(fs.existsSync(f.file), false);
+});
+
+test('answers with a byline block build a valid config and preserve explicit author text', (t) => {
+  const f = sandbox(t);
+  const input = answers();
+  const byline = {
+    title: 'Founder', homepage: 'https://example.com/', topic: 'Plumbing maintenance for homeowners.',
+    sources: ['https://example.com/plumbing-statistics'], authorOption: 'Jane Example Founder, Example Co',
+  };
+  input.seats[0].byline = byline;
+  const before = JSON.stringify(input);
+  const built = buildConfigFromAnswers(input);
+  assert.equal(JSON.stringify(input), before);
+  assert.deepEqual(built.config.seats[0].byline, byline);
+  writeJsonAtomic(f.input, input);
+  const result = f.run(['--from', f.input]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(loadConfig(f.file, { home: f.home }).seats[0].byline, byline);
+  assert.match(result.stdout, /byline ON/);
+  delete input.seats[0].byline.authorOption;
+  assert.equal(buildConfigFromAnswers(input).config.seats[0].byline.authorOption, 'Jane Example Founder, Example Co');
+  input.seats[0].byline = null;
+  assert.equal(buildConfigFromAnswers(input).config.seats[0].byline, null);
+});
+
+test('answer builder rejects a bad byline homepage and collects all byline problems', () => {
+  const input = answers();
+  input.seats[0].byline = {
+    title: 'Founder', homepage: 'http://example.com/', topic: 'Home plumbing.', sources: ['https://example.com/plumbing-statistics'],
+  };
+  assert.throws(() => buildConfigFromAnswers(input), /seats\[0\].byline.homepage must be an https URL/);
+  input.seats[0].byline = { title: '', topic: '', homepage: '', sources: [], authorOption: '' };
+  assert.throws(() => buildConfigFromAnswers(input), (e) => {
+    for (const field of ['title', 'topic', 'homepage', 'sources', 'authorOption']) assert.ok(e.message.includes(`byline.${field}`));
+    assert.equal(e.message.split('\n').length, 5);
+    return true;
+  });
+});
+
+test('interactive onboarding collects byline opt-in, source pages, and default author text', (t) => {
+  const f = sandbox(t);
+  const stdin = [
+    '', '', '', '', 'Example Co', 'Jane Example', '10001', 'Residential plumbing for homeowners',
+    'plumbing', '', '', '', 'A five-person team serves homeowners in Willow Basin.',
+    '', '', '', '', '', '', 'yes', 'Founder', 'https://example.com/', 'Plumbing maintenance for homeowners.',
+    'https://example.com/plumbing-statistics, https://example.com/guide', '', '', '',
+  ].join('\n');
+  const result = f.run([], stdin);
+  assert.equal(result.status, 0, result.stderr || String(result.error));
+  const seat = loadConfig(f.file, { home: f.home }).seats[0];
+  assert.equal(seat.autoSubmit, false);
+  assert.deepEqual(seat.byline, {
+    title: 'Founder', homepage: 'https://example.com/', topic: 'Plumbing maintenance for homeowners.',
+    sources: ['https://example.com/plumbing-statistics', 'https://example.com/guide'], authorOption: 'Jane Example Founder, Example Co',
+  });
+  assert.match(result.stdout, /Write bylined articles on Featured News for this profile\? \(y\/N\)/);
+  assert.match(result.stdout, /your own statistics or guide pages work best; every number in the article must come from these pages/);
 });

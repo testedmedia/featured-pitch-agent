@@ -8,6 +8,7 @@ const DEFAULTS = {
   baseUrl: 'https://www.connectively.us',
   models: { classifier: 'sonnet', drafter: 'sonnet', grader: 'sonnet' },
   gate: { overall: 8, lie_risk: 9, fabrication_risk: 8, ai_likelihood: 7, thesis_match: 0, maxDraftAttempts: 3 },
+  bylineGate: { overall: 8, lie_risk: 9, sourcing: 8, fabrication_risk: 8, ai_likelihood: 7, guideline_fit: 8, maxDraftAttempts: 3 },
   pitch: { minChars: 500, maxChars: 2200 },
   filters: { minDa: 0, maxDa: 100, includeStretch: false, maxPicksPerSeatPerRun: 10 },
   bannedWords: [],
@@ -49,6 +50,36 @@ function isHttpsUrl(value) {
   }
 }
 
+function normalizeByline(raw, seat, problems, label) {
+  if (raw === undefined || raw === null) return null;
+  if (!isObject(raw)) {
+    problems.push(`${label} must be an object or null`);
+    return null;
+  }
+  for (const field of ['title', 'topic']) {
+    if (!isText(raw[field])) problems.push(`${label}.${field} must be a non-empty string`);
+  }
+  if (!isHttpsUrl(raw.homepage)) problems.push(`${label}.homepage must be an https URL`);
+  if (!Array.isArray(raw.sources) || raw.sources.length < 1 || raw.sources.length > 5) {
+    problems.push(`${label}.sources must be an array of 1..5 https URLs`);
+  }
+  if (Array.isArray(raw.sources)) {
+    raw.sources.forEach((url, index) => {
+      if (!isHttpsUrl(url)) problems.push(`${label}.sources[${index}] must be an https URL`);
+    });
+  }
+  if (raw.authorOption !== undefined && !isText(raw.authorOption)) {
+    problems.push(`${label}.authorOption must be a non-empty string`);
+  }
+  const trim = (value) => typeof value === 'string' ? value.trim() : value;
+  return {
+    title: trim(raw.title), homepage: raw.homepage,
+    authorOption: raw.authorOption === undefined
+      ? `${trim(seat.displayName)} ${trim(raw.title)}, ${trim(seat.brand)}` : trim(raw.authorOption),
+    topic: trim(raw.topic), sources: Array.isArray(raw.sources) ? raw.sources.slice() : [],
+  };
+}
+
 function loadConfig(file = CONFIG_FILE, { home = AGENT_HOME } = {}) {
   let input;
   try {
@@ -63,7 +94,7 @@ function loadConfig(file = CONFIG_FILE, { home = AGENT_HOME } = {}) {
   }
   const config = deepMerge(DEFAULTS, input);
   if (!isHttpsUrl(config.baseUrl)) problems.push('baseUrl must be an https:// URL');
-  for (const block of ['models', 'gate', 'filters', 'pitch', 'linkYieldByDa']) {
+  for (const block of ['models', 'gate', 'bylineGate', 'filters', 'pitch', 'linkYieldByDa']) {
     if (!isObject(config[block])) {
       problems.push(`${block} must be an object`);
       config[block] = { ...DEFAULTS[block] };
@@ -72,11 +103,13 @@ function loadConfig(file = CONFIG_FILE, { home = AGENT_HOME } = {}) {
   for (const [key, value] of Object.entries(config.models)) {
     if (!isText(value)) problems.push(`models.${key} must be a non-empty string`);
   }
-  for (const [key, value] of Object.entries(config.gate)) {
-    const min = key === 'maxDraftAttempts' ? 1 : 0;
-    const max = key === 'maxDraftAttempts' ? 5 : 10;
-    if (!Number.isInteger(value) || value < min || value > max) {
-      problems.push(`gate.${key} must be an integer ${min}..${max}`);
+  for (const block of ['gate', 'bylineGate']) {
+    for (const [key, value] of Object.entries(config[block])) {
+      const min = key === 'maxDraftAttempts' ? 1 : 0;
+      const max = key === 'maxDraftAttempts' ? 5 : 10;
+      if (!Number.isInteger(value) || value < min || value > max) {
+        problems.push(`${block}.${key} must be an integer ${min}..${max}`);
+      }
     }
   }
   function checkDa(minDa, maxDa, label) {
@@ -173,6 +206,7 @@ function loadConfig(file = CONFIG_FILE, { home = AGENT_HOME } = {}) {
     }
     const statsUrl = raw.statsUrl === undefined ? null : raw.statsUrl;
     if (statsUrl !== null && !isHttpsUrl(statsUrl)) problems.push(`${label}.statsUrl must be null or an https URL`);
+    const byline = normalizeByline(raw.byline, raw, problems, `${label}.byline`);
     const minDa = raw.minDa ?? config.filters.minDa;
     const maxDa = raw.maxDa ?? config.filters.maxDa;
     const maxPicksPerRun = raw.maxPicksPerRun ?? config.filters.maxPicksPerSeatPerRun;
@@ -182,7 +216,7 @@ function loadConfig(file = CONFIG_FILE, { home = AGENT_HOME } = {}) {
       seats.push({
         key: raw.key, profileId: raw.profileId, displayName: raw.displayName, brand: raw.brand,
         persona: raw.persona, topics: raw.topics, notTopics, bans, banPatterns, claimsFile, claims,
-        statsUrl, minDa, maxDa, maxPicksPerRun, autoSubmit: raw.autoSubmit ?? false, enabled: true,
+        statsUrl, byline, minDa, maxDa, maxPicksPerRun, autoSubmit: raw.autoSubmit ?? false, enabled: true,
       });
     }
   });
@@ -196,7 +230,7 @@ function loadConfig(file = CONFIG_FILE, { home = AGENT_HOME } = {}) {
 
 function printConfigSummary(config) {
   for (const seat of config.seats) {
-    console.log(`${seat.key} | ${seat.brand} | profile ${seat.profileId} | DA ${seat.minDa}-${seat.maxDa} | max picks ${seat.maxPicksPerRun} | auto-submit ${seat.autoSubmit ? 'ON' : 'OFF'}`);
+    console.log(`${seat.key} | ${seat.brand} | profile ${seat.profileId} | DA ${seat.minDa}-${seat.maxDa} | max picks ${seat.maxPicksPerRun} | auto-submit ${seat.autoSubmit ? 'ON' : 'OFF'} | byline ${seat.byline ? 'ON' : 'OFF'}`);
   }
 }
 
@@ -217,4 +251,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { DEFAULTS, ConfigError, loadConfig, printConfigSummary };
+module.exports = { DEFAULTS, ConfigError, loadConfig, printConfigSummary, normalizeByline };

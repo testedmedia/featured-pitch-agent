@@ -18,6 +18,12 @@
         "Does not do new construction or commercial work"
       ],
       "statsUrl": null,
+      "byline": {
+        "title": "Founder",
+        "homepage": "https://example.com/",
+        "topic": "Practical plumbing maintenance and water conservation for homeowners.",
+        "sources": ["https://example.com/plumbing-statistics"]
+      },
       "minDa": null,
       "maxDa": null,
       "maxPicksPerRun": null,

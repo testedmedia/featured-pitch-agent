@@ -1,6 +1,6 @@
 ---
 name: featured-pitch-agent
-description: Run the Featured (Connectively) journalist-question pipeline in this repo. Onboards a new user (niche, expert profiles, approved facts, DA range, auto-submit choice), then scans open questions, drafts pitches, has an independent grader score them, and prepares a review page. Submits only what the user approves. Triggers on "set up Featured", "onboard Featured", "run Featured", "Featured pitches", "answer Featured questions", "Connectively", "journalist questions", "submit the pitches", "add a Featured profile".
+description: Run the Featured (Connectively) journalist-question pipeline and the Featured News byline lane in this repo. Onboards a new user (niche, expert profiles, approved facts, DA range, auto-submit choice), then scans open questions, drafts pitches, has an independent grader score them, and prepares a review page. Submits only what the user approves. Triggers on "set up Featured", "onboard Featured", "run Featured", "Featured pitches", "answer Featured questions", "Connectively", "journalist questions", "submit the pitches", "add a Featured profile", "write a byline", "Featured News article", "bylined articles".
 ---
 
 # Featured pitch agent
@@ -49,6 +49,9 @@ skip something optional, leave it out.
 10. A statistics page URL they own, if any (optional).
 11. A DA range for this profile if it differs from the global one (optional).
 12. Auto-submit for this profile: default NO. Explain that NO means every pitch waits for their approval.
+13. Bylined articles on Featured News for this profile (yes/no). On yes: their job title as shown on
+    Featured, homepage URL, the topic area for articles, and one to five source pages (their own statistics
+    or guide pages) whose numbers the article may use.
 
 Then write the answers to a temporary JSON file in the same shape as `config/answers.example.json`
 and run:
@@ -107,6 +110,26 @@ npm start -- --auto-submit
 
 This submits passed pitches only for profiles with `autoSubmit: true`, then checks each one is stored on
 the question page. Pitches for other profiles still wait on the review page.
+
+## 5. Bylined articles (Featured News)
+
+```bash
+npm run byline -- draft            # all profiles with bylines on; or name profile keys
+```
+
+Tell them how many passed, were held or declined, and open `data/bylines/<date>/review.html`. For each
+PASSED article:
+
+1. Show the complete headline, subheading, article and bio in chat. Not a summary.
+2. Stage it: `npm run byline-stage -- data/bylines/<date>/<profile>.json`. This fills Featured's form and
+   runs Featured's own "Check for AI", then stops. Report the must-fix and advice counts and whether Submit
+   unlocked.
+3. Ask one question: "Submit this article live under <name>?"
+4. Only after a clear yes: `npm run byline-stage -- data/bylines/<date>/<profile>.json --submit --yes`, then
+   report the status line. Anything but `submitted` is not a success.
+
+If Featured's check left Submit locked, the article is not submittable. Re-draft that profile instead of
+editing around the check.
 
 ## Writing rules (if the user asks you to draft or fix a pitch by hand)
 

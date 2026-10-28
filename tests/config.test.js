@@ -52,6 +52,7 @@ test('config deep-merges defaults and normalizes enabled seats and name tokens',
   assert.equal(seat.autoSubmit, false);
   assert.equal(seat.enabled, true);
   assert.equal(seat.statsUrl, null);
+  assert.equal(seat.byline, null);
   assert.equal(seat.minDa, 20);
   assert.equal(seat.maxDa, 100);
   assert.equal(seat.maxPicksPerRun, 10);
@@ -115,7 +116,7 @@ test('config rejects missing, malformed, short-claims, and malformed schema inpu
     if (original === undefined) delete f.seat[field];
     else f.seat[field] = original;
   }
-  for (const block of ['models', 'gate', 'filters', 'pitch', 'linkYieldByDa', 'bannedWords']) {
+  for (const block of ['models', 'gate', 'bylineGate', 'filters', 'pitch', 'linkYieldByDa', 'bannedWords']) {
     f.input[block] = null;
     assert.throws(f.load, (e) => e instanceof ConfigError && e.message.includes(block));
     delete f.input[block];
@@ -136,7 +137,7 @@ test('config CLI reports summaries, all validation errors, and missing-file guid
   f.load();
   result = run(f.file);
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout.trim(), 'example_founder | Example Co | profile 10001 | DA 0-100 | max picks 10 | auto-submit OFF');
+  assert.equal(result.stdout.trim(), 'example_founder | Example Co | profile 10001 | DA 0-100 | max picks 10 | auto-submit OFF | byline OFF');
   f.seat.autoSubmit = true;
   f.load();
   assert.match(run().stdout, /auto-submit ON/);
@@ -148,4 +149,84 @@ test('config CLI reports summaries, all validation errors, and missing-file guid
   assert.match(result.stderr, /profileId/);
   assert.match(result.stderr, /topics/);
   assert.equal(result.stdout, '');
+});
+
+function byline() {
+  return {
+    title: 'Founder', homepage: 'https://example.com/', topic: 'Plumbing maintenance for homeowners.',
+    sources: ['https://example.com/plumbing-statistics'],
+  };
+}
+
+test('byline config normalizes fields, defaults the author, and accepts null', (t) => {
+  const f = fixture(t);
+  f.seat.byline = { ...byline(), title: ' Founder ', topic: ' Plumbing maintenance for homeowners. ' };
+  assert.deepEqual(f.load().seats[0].byline, { ...byline(), authorOption: 'Jane Example Founder, Example Co' });
+  f.seat.byline.authorOption = ' Jane Example Owner, Example Co ';
+  const config = f.load();
+  assert.equal(config.seats[0].byline.authorOption, 'Jane Example Owner, Example Co');
+  const result = spawnSync(process.execPath, [require.resolve('../src/config'), '--check', f.file], {
+    env: { ...process.env, FEATURED_AGENT_HOME: f.home }, encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /byline ON/);
+  f.seat.byline = null;
+  assert.equal(f.load().seats[0].byline, null);
+});
+
+test('byline config collects every field problem alongside other seat problems', (t) => {
+  const f = fixture(t);
+  f.seat.byline = { title: '', homepage: 'http://example.com/', topic: ' ', sources: ['http://example.com/', 42], authorOption: '' };
+  f.seat.topics = [];
+  assert.throws(f.load, (e) => {
+    assert.ok(e instanceof ConfigError);
+    for (const field of ['title', 'homepage', 'topic', 'sources[0]', 'sources[1]', 'authorOption']) {
+      assert.ok(e.problems.some((problem) => problem.startsWith(`seats[0].byline.${field} `)), field);
+    }
+    assert.ok(e.problems.some((problem) => problem.startsWith('seats[0].topics ')));
+    assert.equal(e.problems.length, 7);
+    return true;
+  });
+});
+
+test('byline config rejects invalid shapes, fields, source counts, and URL protocols', (t) => {
+  const f = fixture(t);
+  for (const value of [false, [], 'enabled']) {
+    f.seat.byline = value;
+    assert.throws(f.load, /byline must be an object or null/);
+  }
+  const invalid = {
+    title: [undefined, null, 1, ' '], topic: [undefined, null, 1, ' '],
+    homepage: [undefined, null, 'http://example.com/', 'https://', 'not a URL'],
+    sources: [undefined, null, [], 'https://example.com/', Array(6).fill('https://example.com/'), ['https://']],
+    authorOption: [null, 1, ' '],
+  };
+  for (const [field, values] of Object.entries(invalid)) {
+    for (const value of values) {
+      f.seat.byline = { ...byline(), [field]: value };
+      assert.throws(f.load, (e) => e instanceof ConfigError && e.message.includes(`byline.${field}`));
+    }
+  }
+  f.seat.byline = { ...byline(), sources: Array(5).fill('https://example.com/') };
+  assert.equal(f.load().seats[0].byline.sources.length, 5);
+});
+
+test('bylineGate defaults, partial overrides, and integer boundaries are validated independently', (t) => {
+  const f = fixture(t);
+  const expected = { overall: 8, lie_risk: 9, sourcing: 8, fabrication_risk: 8, ai_likelihood: 7, guideline_fit: 8, maxDraftAttempts: 3 };
+  assert.deepEqual(f.load().bylineGate, expected);
+  f.input.bylineGate = { overall: 10, sourcing: 0, maxDraftAttempts: 5 };
+  const config = f.load();
+  assert.deepEqual(config.bylineGate, { ...expected, ...f.input.bylineGate });
+  assert.deepEqual(config.gate, DEFAULTS.gate);
+  config.bylineGate.overall = 1;
+  assert.deepEqual(DEFAULTS.bylineGate, expected);
+  for (const key of Object.keys(expected)) {
+    for (const value of key === 'maxDraftAttempts' ? [0, 6, 1.5, '3', null] : [-1, 11, 1.5, '8', null]) {
+      f.input.bylineGate = { [key]: value };
+      assert.throws(f.load, (e) => e instanceof ConfigError && e.message.includes(`bylineGate.${key}`));
+    }
+  }
+  f.input.bylineGate = { maxDraftAttempts: 1 };
+  assert.equal(f.load().bylineGate.maxDraftAttempts, 1);
 });

@@ -26,6 +26,12 @@
       "banPatterns": [{ "label": "no-free-claim", "regex": "\\bfree (estimate|inspection)s?\\b", "flags": "i" }],
       "claimsFile": "config/claims/example-co.md",
       "statsUrl": null,
+      "byline": {
+        "title": "Founder",
+        "homepage": "https://example.com/",
+        "topic": "Practical plumbing maintenance and water conservation for homeowners.",
+        "sources": ["https://example.com/plumbing-statistics"]
+      },
       "autoSubmit": false,
       "enabled": true
     }

@@ -14,20 +14,8 @@ const FABRICATION_PATTERNS = [
     /\bafter (looking|reviewing|seeing|handling|working)\b/i,
 ];
 
-function preflight(body, seat, config) {
+function structureFailures(body) {
   const fails = [];
-  if (body.length < config.pitch.minChars || body.length > config.pitch.maxChars) fails.push(`len:${body.length}`);
-  // Claim bans need a mechanical gate even when they also appear in the prompt.
-  if (seat && Array.isArray(seat.banPatterns)) {
-    for (const ban of seat.banPatterns) {
-      if (new RegExp(ban.re.source, ban.re.flags).test(body)) fails.push(`seat-ban:${ban.label}`);
-    }
-  }
-  for (const token of SENTINELS) if (body.includes(token)) fails.push(`banned:${token}`);
-  for (const token of config.bannedBodyTokens) {
-    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (new RegExp(`\\b${escaped}\\b`, 'i').test(body)) fails.push(`banned-name:${token}`);
-  }
   for (const token of SLOP_WORDS) {
     const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (new RegExp(`\\b${escaped}\\b`, 'i').test(body)) fails.push(`slop:${token}`);
@@ -57,8 +45,26 @@ function preflight(body, seat, config) {
   if (/\b(?:my own|our own|our internal|my internal)\s+(?:numbers|data|figures|stats)\b/i.test(body)) {
     fails.push('false-attribution:claims_proprietary_data');
   }
+  return fails;
+}
+
+function preflight(body, seat, config) {
+  const fails = [];
+  if (body.length < config.pitch.minChars || body.length > config.pitch.maxChars) fails.push(`len:${body.length}`);
+  // Claim bans need a mechanical gate even when they also appear in the prompt.
+  if (seat && Array.isArray(seat.banPatterns)) {
+    for (const ban of seat.banPatterns) {
+      if (new RegExp(ban.re.source, ban.re.flags).test(body)) fails.push(`seat-ban:${ban.label}`);
+    }
+  }
+  for (const token of SENTINELS) if (body.includes(token)) fails.push(`banned:${token}`);
+  for (const token of config.bannedBodyTokens) {
+    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`\\b${escaped}\\b`, 'i').test(body)) fails.push(`banned-name:${token}`);
+  }
+  fails.push(...structureFailures(body));
   for (const pattern of FABRICATION_PATTERNS) if (pattern.test(body)) fails.push(`fab-pattern:${pattern.source}`);
   return fails;
 }
 
-module.exports = { preflight, FABRICATION_PATTERNS, SLOP_WORDS, SENTINELS };
+module.exports = { preflight, structureFailures, FABRICATION_PATTERNS, SLOP_WORDS, SENTINELS };
