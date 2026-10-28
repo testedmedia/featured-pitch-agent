@@ -1,7 +1,8 @@
 'use strict';
 
 const READY_COUNTER = /Characters:\s*\d+\s*\/\s*2500/;
-const READY_PROFILE_STRIP = /Add New Profile|Edit Profile/i;
+// Featured replaced the Add/Edit Profile strip with "Profile (Answer attributed to):" in late Oct 2026.
+const READY_PROFILE_STRIP = /Add New Profile|Edit Profile|Profile \(Answer attributed to\)/i;
 const CLOSED_CLUE = /no longer accepting|deadline has passed/i;
 
 function buildAnswerUrl(rawUrl, profileId) {
@@ -19,7 +20,7 @@ function classifyAnswerPage(bodyText) {
   const composerOpen = /Characters:\s*0\s*\/\s*2500/.test(body);
   const composerCounter = /Characters:\s*(\d+)\s*\/\s*2500/.exec(body);
   const composerHasStoredAnswer = Boolean(composerCounter) && parseInt(composerCounter[1], 10) > 0;
-  const answeredBanner = /has answered this question|you('|')ve already answered|already submitted|already pitched|you have answered/i.test(body);
+  const answeredBanner = /ha(?:s|ve) answered this question|you('|')ve already answered|already submitted|already pitched|you have answered/i.test(body);
   if (composerHasStoredAnswer || (answeredBanner && !composerOpen)) return 'already_answered';
   return CLOSED_CLUE.test(body) ? 'closed' : 'fresh';
 }

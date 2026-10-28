@@ -393,3 +393,13 @@ test('inconclusive server verification stays false and records an error', async 
   assert.equal(fixture.read().submitted[0].verified, false);
   assert.match(fixture.read().errors[0], /could not be verified/);
 });
+
+test('a scan that stopped before the last page is critical but still drafts what it read', async (t) => {
+  const fixture = mainFixture(t);
+  fixture.dependencies.scan.scanQuestions = async () => ({
+    scannedAt: new Date().toISOString(), items: [pick()], complete: false, pagesRead: 6, pagesTotal: 57,
+  });
+  assert.equal(await main([], fixture.dependencies), 1);
+  assert.ok(fixture.read().errors.some((error) => /Scan incomplete: read 6 of 57 pages/.test(error)));
+  assert.equal(fixture.read().counts.drafted, 1);
+});

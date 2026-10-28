@@ -91,3 +91,11 @@ for (const name of ['login', 'scan', 'dedupe', 'details']) {
     assert.equal(result.status, 0, result.stderr || result.stdout);
   });
 }
+
+test('the late-2026 answer page (Profile attributed line) is read correctly', () => {
+  const header = 'Profile (Answer attributed to):\nJane Example\nFounder, Example Co\n';
+  assert.equal(classifyAnswerPage(`${header}Question\nWhat works?\nAnswer\nCharacters: 0 / 2500\nSubmit`), 'fresh');
+  assert.equal(classifyAnswerPage(`${header}have answered this question\nAnswer\nCharacters: 981 / 2500`), 'already_answered');
+  assert.equal(classifyAnswerPage(`${header}This question is no longer accepting answers.`), 'closed');
+  assert.equal(classifyAnswerPage(`${header}Question\nAnswer`), null);
+});

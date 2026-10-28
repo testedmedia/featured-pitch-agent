@@ -355,6 +355,11 @@ async function main(argv = process.argv.slice(2), dependencies = {}) {
       throw new Error('Live scan is missing a fresh scannedAt timestamp (maximum age: 2 hours)');
     }
     if (!flags.fromScan && !feed.items.length) throw new Error('Live scan returned zero rows');
+    if (feed.complete === false) {
+      // Keep drafting what was read, but a short scan is an outage signal, never a quiet day.
+      report.errors.push(`Scan incomplete: read ${feed.pagesRead} of ${feed.pagesTotal} pages. Featured may have changed its pager.`);
+      critical = true;
+    }
     log('step 3/8 classifying questions');
     const classified = await classifier.classifyQuestions(feed.items, { config, llm });
     paths.writeJsonAtomic(path.join(runDir, 'classified.json'), classified);
@@ -389,7 +394,7 @@ async function main(argv = process.argv.slice(2), dependencies = {}) {
     const stage = await (dependencies.runDraftStage || runDraftStage)(kept, { config, llm, details, runDir });
     for (const name of ['passed', 'held', 'declined', 'errors']) report[name].push(...stage[name]);
     report.counts.drafted = stage.passed.length + stage.held.length + stage.declined.length;
-    critical = Boolean(stage.critical);
+    critical = critical || Boolean(stage.critical);
     log('step 8/8 writing report and review');
     saveReport();
     const automatic = flags.autoSubmit ? report.passed.filter((row) => config.seatsByKey[row.seatKey].autoSubmit === true) : [];

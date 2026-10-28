@@ -34,6 +34,14 @@ async function extractCurrent(page) {
 
 async function clickNextPage(page) {
   return page.evaluate(() => {
+    // Current pager: icon buttons whose only name is hidden text, e.g. <span class="sr-only">Go to next page</span>.
+    const hidden = Array.from(document.querySelectorAll('button')).find((button) =>
+      /^\s*Go to next page\s*$/i.test(((button.querySelector('.sr-only') || {}).textContent) || ''));
+    if (hidden) {
+      if (hidden.disabled || hidden.getAttribute('aria-disabled') === 'true') return false;
+      hidden.click();
+      return true;
+    }
     const selectors = [
       'button[aria-label="Go to next page"]', 'button[aria-label*="next page" i]',
       'button[aria-label*="Next" i]', 'a[aria-label*="next" i]',
@@ -46,17 +54,8 @@ async function clickNextPage(page) {
         return true;
       }
     }
-    const buttons = Array.from(document.querySelectorAll('button')).filter((button) => {
-      const rect = button.getBoundingClientRect();
-      return rect.bottom > window.innerHeight - 150 && rect.width < 60;
-    });
-    if (buttons.length >= 2) {
-      const next = buttons[buttons.length - 2];
-      if (!next.disabled && next.getAttribute('aria-disabled') !== 'true') {
-        next.click();
-        return true;
-      }
-    }
+    // No positional guessing: clicking "some small button near the bottom" is how scans silently
+    // stopped after a few pages. An unknown pager stops the scan and the caller reports it incomplete.
     return false;
   });
 }
@@ -80,7 +79,7 @@ async function scanQuestions({ config, browser = null }) {
     await page.waitForTimeout(5000);
     if (isLoginUrl(page.url())) throw new SessionExpiredError();
     try {
-      await page.evaluate(() => {
+      const nativeMax = await page.evaluate(() => {
         for (const select of document.querySelectorAll('select')) {
           const values = Array.from(select.options).map((option) => option.value);
           if (values.includes('10') || values.includes('100')) {
@@ -94,6 +93,19 @@ async function scanQuestions({ config, browser = null }) {
         }
         return null;
       });
+      // Current page: a custom listbox labeled "Rows per page" (10, 20, 50, 100) instead of a <select>.
+      const combo = page.locator('[aria-label="Rows per page"]').first();
+      if (!nativeMax && await combo.count()) {
+        await combo.click();
+        await page.waitForTimeout(800);
+        const sizes = (await page.locator('[role="option"]').allInnerTexts()).map((t) => parseInt(t, 10)).filter(Number.isFinite);
+        if (sizes.length) {
+          const max = Math.max(...sizes);
+          await page.locator('[role="option"]', { hasText: new RegExp(`^\\s*${max}\\s*$`) }).first().click();
+        } else {
+          await page.keyboard.press('Escape');
+        }
+      }
     } catch {
       // The boost is optional; normal pagination still collects all rows.
     }
@@ -102,6 +114,7 @@ async function scanQuestions({ config, browser = null }) {
     const maxPages = Math.min(info ? info.total : 100, 100);
     const unique = new Map();
     let emptyPages = 0;
+    let lastPage = 0;
     for (let pageNum = 1; pageNum <= maxPages; pageNum += 1) {
       if (isLoginUrl(page.url())) throw new SessionExpiredError();
       const before = unique.size;
@@ -110,12 +123,16 @@ async function scanQuestions({ config, browser = null }) {
         if (!unique.has(key)) unique.set(key, { ...item, da: parseDa(item.da) });
       }
       emptyPages = unique.size === before ? emptyPages + 1 : 0;
-      if (emptyPages >= 3 || pageNum === maxPages || !await clickNextPage(page)) break;
+      lastPage = pageNum;
+      if (emptyPages >= 3 || pageNum === maxPages) break;
+      if (!await clickNextPage(page)) break;
       await page.waitForTimeout(2500);
     }
     const items = Array.from(unique.values());
     if (!items.length) throw new Error('question scan returned zero rows');
-    return { scannedAt: new Date().toISOString(), count: items.length, items };
+    // A scan that stopped before the last page must say so; a short feed otherwise looks like a quiet day.
+    const complete = !info || !info.total || lastPage >= info.total;
+    return { scannedAt: new Date().toISOString(), count: items.length, complete, pagesRead: lastPage, pagesTotal: info ? info.total : null, items };
   } finally {
     try {
       if (context) await context.close();

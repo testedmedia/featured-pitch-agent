@@ -283,3 +283,11 @@ test('offline consecutive platform refusals stop without reloading or writing a 
   assert.ok(!fixture.events.some(([event]) => event === 'reload'));
   assert.equal(fs.existsSync(fixture.ledgerFile), false);
 });
+
+test('the late-2026 answer page: composer state and the attributed profile are read exactly', () => {
+  const { readAttributedProfile } = require('../src/submit');
+  const body = 'Questions\nProfile (Answer attributed to):\nJane Example\nFounder, Example Co\nQuestion\nWhat works?\nAnswer\nCharacters: 0 / 2500\nSubmit';
+  assert.deepEqual(inspectComposerState(body), { status: 'fresh', count: 0 });
+  assert.deepEqual(readAttributedProfile(body), { name: 'Jane Example', title: 'Founder, Example Co' });
+  assert.equal(readAttributedProfile('no profile block here'), null);
+});

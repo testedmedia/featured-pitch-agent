@@ -24,11 +24,17 @@ function readPitchedCount(bodyText) {
 function inspectComposerState(bodyText) {
   const body = String(bodyText || '');
   const match = /Characters:\s*(\d+)\s*\/\s*2500/.exec(body);
-  const profileStripReady = /Add New Profile|Edit Profile/i.test(body);
+  const profileStripReady = /Add New Profile|Edit Profile|Profile \(Answer attributed to\)/i.test(body);
   if (!match || !profileStripReady) return { status: 'unreadable', count: null };
   const count = parseInt(match[1], 10);
   if (!Number.isFinite(count)) return { status: 'unreadable', count: null };
   return { status: count > 0 ? 'already_answered' : 'fresh', count };
+}
+
+// The answer page names the profile the answer goes out under: "Profile (Answer attributed to):\n<Name>\n<Title>".
+function readAttributedProfile(bodyText) {
+  const match = /Profile \(Answer attributed to\):\s*\n\s*([^\n]+)\n\s*([^\n]*)/.exec(String(bodyText || ''));
+  return match ? { name: match[1].trim(), title: match[2].trim() } : null;
 }
 
 function ledgerKey(url, profileId) {
@@ -78,7 +84,7 @@ async function answerIsStoredForProfile(page) {
     while (Date.now() < deadline) {
       const body = await page.evaluate(() => document.body.innerText || '');
       const counter = /Characters:\s*(\d+)\s*\/\s*2500/.exec(body);
-      const profileStrip = /Add New Profile|Edit Profile/i.test(body);
+      const profileStrip = /Add New Profile|Edit Profile|Profile \(Answer attributed to\)/i.test(body);
       if (counter && profileStrip) return parseInt(counter[1], 10) > 0;
       await page.waitForTimeout(500);
     }
@@ -145,9 +151,14 @@ async function submitOne(context, item, config, live, runDir, outcome) {
       return;
     }
     const seat = config.seatsByKey[item.seatKey];
-    if (!seat.displayName || !earlyBody.includes(seat.displayName)) {
+    // Exact match on the attributed profile when the page prints it; older pages only show the name somewhere.
+    const attributed = readAttributedProfile(earlyBody);
+    const bylineOk = Boolean(seat.displayName) && (attributed ? attributed.name === seat.displayName : earlyBody.includes(seat.displayName));
+    if (!bylineOk) {
       outcome.status = 'reject_byline_not_visible';
-      outcome.detail = `Expected byline "${seat.displayName}" is not visible.`;
+      outcome.detail = attributed
+        ? `Page attributes the answer to "${attributed.name}", expected "${seat.displayName}".`
+        : `Expected byline "${seat.displayName}" is not visible.`;
       return;
     }
 
@@ -328,7 +339,7 @@ async function main() {
   process.exitCode = outcomes.every((outcome) => accepted.includes(outcome.status)) ? 0 : 3;
 }
 
-module.exports = { inspectComposerState, readPitchedCount, SUBMIT_FAILURE_PATTERNS, ledgerKey, presubmitRejection, classifyPostSubmit, submitItems };
+module.exports = { readAttributedProfile, inspectComposerState, readPitchedCount, SUBMIT_FAILURE_PATTERNS, ledgerKey, presubmitRejection, classifyPostSubmit, submitItems };
 
 if (require.main === module) {
   main().catch((e) => { console.error(e.message); process.exit(1); });
